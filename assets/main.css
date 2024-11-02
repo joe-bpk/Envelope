@@ -1,0 +1,103 @@
+/* GTK Theme Styles */
+window {
+    background: #ffffff;
+    color: #000000;
+}
+
+button {
+    background: #f0f0f0;
+    color: #000000;
+    border: 1px solid alpha(#000000, 0.2);
+    border-radius: 4px;
+    padding: 6px 12px;
+}
+
+button:hover {
+    background: alpha(#000000, 0.1);
+}
+
+treeview {
+    background: #ffffff;
+    color: #000000;
+}
+
+treeview:selected {
+    background: #3584e4;
+    color: #ffffff;
+}
+
+label {
+    color: #000000;
+}
+
+switch {
+    background-color: #f0f0f0;
+    border-radius: 20px;
+}
+
+switch:checked {
+    background-color: #3584e4;
+}
+
+/* Dark mode styles */
+.dark {
+    background: #2d2d2d;
+    color: #e0e0e0;
+}
+
+.dark button {
+    background-color: #363636;
+    color: #e0e0e0;
+    border-color: #464646;
+}
+
+.dark button:hover {
+    background-color: #464646;
+}
+
+.dark treeview {
+    background-color: #2d2d2d;
+    color: #e0e0e0;
+}
+
+.dark treeview:selected {
+    background-color: #464646;
+    color: #ffffff;
+}
+
+.dark label {
+    color: #e0e0e0;
+}
+
+.dark switch {
+    background-color: #363636;
+}
+
+.dark switch:checked {
+    background-color: #464646;
+}
+
+
+
+/* Add or update these styles in your editor.css */
+
+/* Editor Layout */
+.toastui-editor-md-preview .toastui-editor-contents {
+    flex: 1 !important;
+    min-width: 50% !important;
+    transition: all 0.3s ease !important;
+}
+
+/* Hidden Preview State */
+.preview-hidden .toastui-editor-md-preview .toastui-editor-contents {
+    display: none !important;
+    width: 0 !important;
+    min-width: 0 !important;
+}
+
+/* Adjust editor size when preview is hidden */
+.preview-hidden .toastui-editor {
+    width: 100% !important;
+    max-width: none !important;
+}
+

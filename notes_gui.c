@@ -37,51 +37,78 @@ GtkWidget *vault_label;
 gboolean dark_mode_enabled = FALSE;
 char *config_file_path = NULL;
 GSettings *settings;
-
+gboolean preview_hidden = TRUE;  // Default to hidden preview
+GtkWidget *preview_toggle_switch;
+GtkCssProvider *css_provider = NULL;
 
 // Function prototypes
+// Basic note operations
 void add_note(GtkWidget *widget, gpointer data);
 void delete_note(GtkWidget *widget, gpointer data);
 void note_selected(GtkListBox *box, GtkListBoxRow *row, gpointer data);
 void update_notes_list();
+
+// Editor operations
 void load_editor();
 void get_editor_content(GtkWidget *widget, gpointer data);
 void handle_editor_content(GObject *source_object, GAsyncResult *result, gpointer user_data);
+void show_editor();
+void show_start_page();
+void setup_css_provider(void);
+
+
+// File operations
 void save_note(GtkWidget *widget, gpointer data);
 void save_note_as(GtkWidget *widget, gpointer data);
 void save_current_content_to_file(const char *filepath);
 void handle_save_content(GObject *source_object, GAsyncResult *result, gpointer user_data);
+void rename_file(GtkWidget *menuitem, gpointer userdata);
+void delete_file(GtkWidget *menuitem, gpointer userdata);
+
+// Asset management
+char* get_asset_path(const char* filename);
+char* get_file_contents(const char* path);
+
+// UI handlers
 void show_error_dialog(const char *message);
 void choose_vault_directory(GtkWidget *widget, gpointer data);
 void refresh_file_tree();
 void file_tree_selection_changed(GtkTreeSelection *selection, gpointer data);
 void update_window_title();
+gboolean on_tree_button_press(GtkWidget *widget, GdkEventButton *event, gpointer userdata);
+void update_vault_label();
+void update_recent_files();
+
+// Settings and configuration
+void init_config();
+void load_config();
+void save_config();
+void toggle_dark_mode(GtkWidget *widget, gpointer data);
+void apply_dark_mode();
+void toggle_preview(GtkWidget *widget, gpointer data);
+
+// Autosave functionality
 gboolean autosave_callback(gpointer user_data);
 void toggle_autosave(GtkWidget *widget, gpointer data);
 void update_save_indicator();
 void mark_content_unsaved();
 gboolean check_unsaved_changes();
-void rename_file(GtkWidget *menuitem, gpointer userdata);
-void delete_file(GtkWidget *menuitem, gpointer userdata);
-gboolean on_tree_button_press(GtkWidget *widget, GdkEventButton *event, gpointer userdata);
-void toggle_dark_mode(GtkWidget *widget, gpointer data);
-void load_config();
-void save_config();
-void apply_dark_mode();
-void update_vault_label();
-// Add this with the other function prototypes
-void init_config();
-void register_web_handlers();
-void show_start_page();
-void show_editor();
+
+// WebKit handlers
+void register_web_handlers(WebKitUserContentManager *manager);
+void web_view_load_changed(WebKitWebView *web_view, WebKitLoadEvent load_event, gpointer user_data);
 void handle_new_note(WebKitUserContentManager *manager, 
                     WebKitJavascriptResult *js_result, 
                     gpointer user_data);
 void handle_open_file(WebKitUserContentManager *manager, 
                      WebKitJavascriptResult *js_result, 
                      gpointer user_data);
-void update_recent_files();
 
+void apply_gtk_css();
+
+void handle_editor_initialized(WebKitUserContentManager *manager, 
+                             WebKitJavascriptResult *js_result, 
+                             gpointer user_data);
 
 
 static void ignore_webkit_messages(const gchar *log_domain,
@@ -95,15 +122,18 @@ static void ignore_webkit_messages(const gchar *log_domain,
     g_log_default_handler(log_domain, log_level, message, user_data);
 }
 
+
 int main(int argc, char *argv[]) {
-    // Set up error handling
     g_log_set_handler("GLib-GIO",
                      G_LOG_LEVEL_CRITICAL | G_LOG_LEVEL_WARNING,
                      ignore_webkit_messages,
                      NULL);
 
+
     gtk_init(&argc, &argv);
 
+
+    setup_css_provider();
 
 
     // Create main window
@@ -123,19 +153,18 @@ int main(int argc, char *argv[]) {
     // Vault selection section
     GtkWidget *choose_vault_button = gtk_button_new_with_label("Choose Vault Directory");
     gtk_box_pack_start(GTK_BOX(left_panel), choose_vault_button, FALSE, FALSE, 0);
-    
+
     vault_label = gtk_label_new("No vault selected");
     gtk_label_set_ellipsize(GTK_LABEL(vault_label), PANGO_ELLIPSIZE_START);
     gtk_box_pack_start(GTK_BOX(left_panel), vault_label, FALSE, FALSE, 5);
-    load_editor();
-    register_web_handlers();
-    show_start_page();
+
     // File tree section
     tree_store = gtk_tree_store_new(2, G_TYPE_STRING, G_TYPE_STRING);
     tree_view = GTK_TREE_VIEW(gtk_tree_view_new_with_model(GTK_TREE_MODEL(tree_store)));
     g_signal_connect(GTK_WIDGET(tree_view), "button-press-event", 
                     G_CALLBACK(on_tree_button_press), NULL);
 
+    
 
     GtkTreeViewColumn *column = gtk_tree_view_column_new();
     GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
@@ -156,6 +185,17 @@ int main(int argc, char *argv[]) {
     GtkWidget *settings_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_box_pack_start(GTK_BOX(left_panel), settings_box, FALSE, FALSE, 5);
 
+    GtkWidget *preview_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    GtkWidget *preview_label = gtk_label_new("Hide Preview");
+    preview_toggle_switch = gtk_switch_new();
+    gtk_switch_set_active(GTK_SWITCH(preview_toggle_switch), TRUE);  // Default to hidden
+    gtk_box_pack_start(GTK_BOX(preview_box), preview_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(preview_box), preview_toggle_switch, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(settings_box), preview_box, FALSE, FALSE, 0);
+
+    // Connect preview toggle signal
+    g_signal_connect(preview_toggle_switch, "notify::active", G_CALLBACK(toggle_preview), NULL);
+
     // Dark mode toggle
     GtkWidget *dark_mode_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
     GtkWidget *dark_mode_label = gtk_label_new("Dark Mode");
@@ -170,6 +210,11 @@ int main(int argc, char *argv[]) {
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(autosave_check), TRUE);
 
     init_config();
+
+    if (dark_mode_enabled) {
+    gtk_switch_set_active(GTK_SWITCH(dark_mode_switch), TRUE);
+    apply_dark_mode();
+  }
 
     // Save indicator
     save_indicator_label = gtk_label_new("Saved");
@@ -190,16 +235,31 @@ int main(int argc, char *argv[]) {
     gtk_box_pack_start(GTK_BOX(buttons_box), save_as_button, FALSE, FALSE, 0);
 
     // Editor section
-    WebKitSettings *settings = webkit_settings_new();
+    // Create the user content manager and register handlers
+    WebKitUserContentManager *manager = webkit_user_content_manager_new();
+    register_web_handlers(manager);
+
+    // Create the web view with the user content manager
+    web_view = webkit_web_view_new_with_user_content_manager(manager);
+
+    // Set settings
+    WebKitSettings *settings = webkit_web_view_get_settings(WEBKIT_WEB_VIEW(web_view));
     webkit_settings_set_enable_javascript(settings, TRUE);
     webkit_settings_set_allow_file_access_from_file_urls(settings, TRUE);
-    web_view = webkit_web_view_new_with_settings(settings);
+    webkit_settings_set_enable_write_console_messages_to_stdout(settings, TRUE);
+    webkit_settings_set_allow_universal_access_from_file_urls(settings, TRUE);
 
     GtkWidget *scrolled_window_web = gtk_scrolled_window_new(NULL, NULL);
     gtk_widget_set_hexpand(scrolled_window_web, TRUE);
     gtk_widget_set_vexpand(scrolled_window_web, TRUE);
     gtk_container_add(GTK_CONTAINER(scrolled_window_web), web_view);
     gtk_box_pack_start(GTK_BOX(main_box), scrolled_window_web, TRUE, TRUE, 5);
+
+    // Now that web_view is initialized, call load_editor()
+    load_editor();
+
+    // Connect to load-changed signal
+    g_signal_connect(web_view, "load-changed", G_CALLBACK(web_view_load_changed), NULL);
 
     // Connect all signals
     g_signal_connect(choose_vault_button, "clicked", G_CALLBACK(choose_vault_directory), NULL);
@@ -212,12 +272,6 @@ int main(int argc, char *argv[]) {
 
     GtkTreeSelection *selection = gtk_tree_view_get_selection(tree_view);
     g_signal_connect(selection, "changed", G_CALLBACK(file_tree_selection_changed), NULL);
-    
-    
-
-    // Initialize editor
-    load_editor();
-    
 
     // Apply settings from config
     if (dark_mode_enabled) {
@@ -229,26 +283,48 @@ int main(int argc, char *argv[]) {
     gtk_widget_show_all(window);
     gtk_main();
 
+    if (css_provider) {
+        g_object_unref(css_provider);
+    }
+
     // Save config before exit
     save_config();
 
     return 0;
 }
 
-
 void load_editor() {
-    WebKitSettings *settings = webkit_web_view_get_settings(WEBKIT_WEB_VIEW(web_view));
-    webkit_settings_set_enable_write_console_messages_to_stdout(settings, TRUE);
-    webkit_settings_set_allow_universal_access_from_file_urls(settings, TRUE);
-    webkit_settings_set_allow_file_access_from_file_urls(settings, TRUE);
-
-    // Set up content changed handler
-    WebKitUserContentManager *manager = webkit_web_view_get_user_content_manager(WEBKIT_WEB_VIEW(web_view));
-    webkit_user_content_manager_register_script_message_handler(manager, "contentChanged");
-    g_signal_connect(manager, "script-message-received::contentChanged",
-                    G_CALLBACK(mark_content_unsaved), NULL);
-
-    const char *html_content = "<!DOCTYPE html>"
+    char *css_path = get_asset_path("editor.css");
+    char *js_path = get_asset_path("editor.js");
+    
+    if (!css_path || !js_path) {
+        show_error_dialog("Failed to locate assets");
+        g_free(css_path);
+        g_free(js_path);
+        return;
+    }
+    
+    // Read CSS file
+    char *css_content = get_file_contents(css_path);
+    if (!css_content) {
+        show_error_dialog("Failed to load editor.css");
+        g_free(css_path);
+        g_free(js_path);
+        return;
+    }
+    
+    // Read JS file
+    char *js_content = get_file_contents(js_path);
+    if (!js_content) {
+        show_error_dialog("Failed to load editor.js");
+        g_free(css_path);
+        g_free(js_path);
+        g_free(css_content);
+        return;
+    }
+    
+    const char *html_template = 
+        "<!DOCTYPE html>"
         "<html>"
         "<head>"
         "<meta charset=\"UTF-8\">"
@@ -257,74 +333,14 @@ void load_editor() {
         "https://uicdn.toast.com data: blob:;\">"
         "<title>Markdown Editor</title>"
         "<link rel=\"stylesheet\" href=\"https://uicdn.toast.com/editor/latest/toastui-editor.min.css\">"
-        "<style>"
-        "html, body { margin: 0; padding: 0; height: 100%; }"
-        "#editor { height: 100%; }"
-        ".toastui-editor-defaultUI { height: 100% !important; }"
-        ".dark-theme {"
-        "    background-color: #2d2d2d !important;"
-        "    color: #e0e0e0 !important;"
-        "}"
-        ".dark-theme .toastui-editor-defaultUI {"
-        "    background-color: #2d2d2d !important;"
-        "    border-color: #464646 !important;"
-        "}"
-        ".dark-theme .toastui-editor-md-container {"
-        "    background-color: #1e1e1e !important;"
-        "    color: #e0e0e0 !important;"
-        "}"
-        ".dark-theme .toastui-editor-md-preview {"
-        "    background-color: #2d2d2d !important;"
-        "    color: #e0e0e0 !important;"
-        "}"
-        ".dark-theme .toastui-editor-toolbar {"
-        "    background-color: #363636 !important;"
-        "    border-bottom-color: #464646 !important;"
-        "}"
-        ".dark-theme .toastui-editor-defaultUI-toolbar {"
-        "    background-color: #363636 !important;"
-        "    border-bottom-color: #464646 !important;"
-        "}"
-        ".dark-theme .toastui-editor-toolbar-icons {"
-        "    border-color: #464646 !important;"
-        "    background-color: #363636 !important;"
-        "    color: #e0e0e0 !important;"
-        "}"
-        ".dark-theme .toastui-editor-toolbar-icons:hover {"
-        "    background-color: #464646 !important;"
-        "}"
-        ".dark-theme .toastui-editor-mode-switch {"
-        "    background-color: #363636 !important;"
-        "    border-color: #464646 !important;"
-        "}"
-        ".dark-theme .toastui-editor-mode-switch .tab-item {"
-        "    color: #e0e0e0 !important;"
-        "}"
-        ".dark-theme .toastui-editor-mode-switch .tab-item.active {"
-        "    background-color: #464646 !important;"
-        "}"
-        ".dark-theme .toastui-editor-context-menu {"
-        "    background-color: #363636 !important;"
-        "    border-color: #464646 !important;"
-        "    color: #e0e0e0 !important;"
-        "}"
-        "  .start-page { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }"
-        "  .start-page.dark { background: #2d2d2d; color: #e0e0e0; }"
-        "  .start-actions { display: flex; gap: 20px; margin-top: 20px; }"
-        "  .start-button { padding: 10px 20px; border-radius: 5px; cursor: pointer; border: none; }"
-        "  .start-button.dark { background: #464646; color: #e0e0e0; border: 1px solid #666; }"
-        "  .recent-files { margin-top: 30px; max-width: 600px; width: 100%; }"
-        "  .recent-file { padding: 10px; margin: 5px 0; border-radius: 5px; cursor: pointer; }"
-        "  .recent-file.dark { background: #363636; }"
-        "  .recent-file:hover { background: #464646; }"
-        "  #editor { display: none; height: 100%; }"
-        "</style>"
+        "<style>%s</style>"
         "</head>"
         "<body>"
         "<div id=\"start-page\" class=\"start-page\">"
         "  <h1>Welcome to Markdown Notes</h1>"
         "  <div class=\"start-actions\">"
-        "    <button onclick=\"window.webkit.messageHandlers.newNote.postMessage('')\" class=\"start-button\">New Note</button>"
+        "    <button onclick=\"window.webkit.messageHandlers.newNote.postMessage('')\" "
+        "            class=\"start-button\">New Note</button>"
         "  </div>"
         "  <div class=\"recent-files\" id=\"recent-files\">"
         "    <h2>Recent Notes</h2>"
@@ -333,47 +349,28 @@ void load_editor() {
         "</div>"
         "<div id=\"editor\"></div>"
         "<script src=\"https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js\"></script>"
-        "<script>"
-        "const editor = new toastui.Editor({"
-        "  el: document.querySelector('#editor'),"
-        "  height: '100%',"
-        "  initialEditType: 'wysiwyg',"
-        "  previewStyle: 'vertical',"
-        "  usageStatistics: false"
-        "});"
-        ""
-        "function showEditor() {"
-        "  document.getElementById('start-page').style.display = 'none';"
-        "  document.getElementById('editor').style.display = 'block';"
-        "}"
-        ""
-        "function showStartPage() {"
-        "  document.getElementById('start-page').style.display = 'flex';"
-        "  document.getElementById('editor').style.display = 'none';"
-        "}"
-        ""
-        "function updateRecentFiles(files) {"
-        "  const list = document.getElementById('recent-files-list');"
-        "  list.innerHTML = '';"
-        "  files.forEach(file => {"
-        "    const div = document.createElement('div');"
-        "    div.className = 'recent-file';"
-        "    div.textContent = file.name;"
-        "    div.onclick = () => window.webkit.messageHandlers.openFile.postMessage(file.path);"
-        "    list.appendChild(div);"
-        "  });"
-        "}"
-        ""
-        "editor.on('change', () => {"
-        "  window.webkit.messageHandlers.contentChanged.postMessage('');"
-        "});"
-        "</script>"
+        "<script>%s</script>"
         "</body>"
         "</html>";
-
+    
+    char *html_content = g_strdup_printf(html_template, css_content, js_content);
+    
     webkit_web_view_load_html(WEBKIT_WEB_VIEW(web_view), html_content, "file:///");
+    
+    g_free(css_path);
+    g_free(js_path);
+    g_free(css_content);
+    g_free(js_content);
+    g_free(html_content);
 }
 
+void web_view_load_changed(WebKitWebView *web_view, WebKitLoadEvent load_event, gpointer user_data) {
+    if (load_event == WEBKIT_LOAD_FINISHED) {
+        // Now that the content is loaded, we can call JavaScript functions
+        show_start_page();
+        apply_dark_mode(); // Apply dark mode after content is loaded
+    }
+}
 
 void choose_vault_directory(GtkWidget *widget, gpointer data) {
     GtkWidget *dialog = gtk_file_chooser_dialog_new("Choose Vault Directory",
@@ -462,8 +459,19 @@ void file_tree_selection_changed(GtkTreeSelection *selection, gpointer data) {
             update_window_title();
         }
         g_free(filepath);
+        show_editor(); // Show the editor when a file is selected
     }
 }
+
+void toggle_preview(GtkWidget *widget, gpointer data) {
+    preview_hidden = gtk_switch_get_active(GTK_SWITCH(widget));
+    char *script = g_strdup_printf("togglePreview(!Boolean(%s));", 
+                                 preview_hidden ? "true" : "false");
+    webkit_web_view_evaluate_javascript(WEBKIT_WEB_VIEW(web_view),
+        script, -1, NULL, NULL, NULL, NULL, NULL);
+    g_free(script);
+}
+
 
 
 void save_note(GtkWidget *widget, gpointer data) {
@@ -473,7 +481,6 @@ void save_note(GtkWidget *widget, gpointer data) {
     }
     save_current_content_to_file(current_file_path);
 }
-
 
 void save_note_as(GtkWidget *widget, gpointer data) {
     GtkWidget *dialog = gtk_file_chooser_dialog_new("Save Note As",
@@ -515,7 +522,6 @@ void save_note_as(GtkWidget *widget, gpointer data) {
 
     gtk_widget_destroy(dialog);
 }
-
 
 void save_current_content_to_file(const char *filepath) {
     webkit_web_view_evaluate_javascript(WEBKIT_WEB_VIEW(web_view),
@@ -639,7 +645,6 @@ void add_note(GtkWidget *widget, gpointer data) {
     gtk_widget_destroy(dialog);
 }
 
-
 void delete_note(GtkWidget *widget, gpointer data) {
     GtkListBoxRow *selected_row = gtk_list_box_get_selected_row(GTK_LIST_BOX(list_box));
     if (selected_row != NULL) {
@@ -717,7 +722,6 @@ void note_selected(GtkListBox *box, GtkListBoxRow *row, gpointer data) {
     }
 }
 
-
 void update_notes_list() {
     GList *children, *iter;
     children = gtk_container_get_children(GTK_CONTAINER(list_box));
@@ -789,7 +793,7 @@ void mark_content_unsaved() {
     is_content_saved = FALSE;
     update_save_indicator();
     update_window_title();
-    
+
     if (autosave_enabled && current_file_path) {
         save_current_content_to_file(current_file_path);
     }
@@ -799,7 +803,6 @@ void update_save_indicator() {
     gtk_label_set_text(GTK_LABEL(save_indicator_label), 
                       is_content_saved ? "Saved" : "Unsaved*");
 }
-
 
 gboolean autosave_callback(gpointer user_data) {
     if (autosave_enabled && current_file_path && !is_content_saved) {
@@ -823,7 +826,6 @@ void toggle_autosave(GtkWidget *widget, gpointer data) {
         }
     }
 }
-
 
 gboolean check_unsaved_changes() {
     if (autosave_enabled && current_file_path) {
@@ -861,7 +863,6 @@ gboolean check_unsaved_changes() {
             return FALSE;
     }
 }
-
 
 void rename_file(GtkWidget *menuitem, gpointer userdata) {
     GtkTreeSelection *selection = gtk_tree_view_get_selection(tree_view);
@@ -968,53 +969,36 @@ gboolean on_tree_button_press(GtkWidget *widget, GdkEventButton *event, gpointer
     return FALSE;
 }
 
-
 void apply_dark_mode() {
-    GtkSettings *gtk_settings = gtk_settings_get_default();
-    g_object_set(G_OBJECT(gtk_settings),
-                "gtk-application-prefer-dark-theme",
-                dark_mode_enabled,
-                NULL);
-
-    const char *script = dark_mode_enabled ?
-        "document.body.classList.add('dark-theme');" :
-        "document.body.classList.remove('dark-theme');";
+    // Get the main window style context
+    GtkStyleContext *window_context = gtk_widget_get_style_context(window);
     
-    webkit_web_view_evaluate_javascript(WEBKIT_WEB_VIEW(web_view),
-        script,
-        -1,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL);
+    // Remove opposite theme class
+    gtk_style_context_remove_class(window_context, dark_mode_enabled ? "light" : "dark");
+    // Add current theme class
+    gtk_style_context_add_class(window_context, dark_mode_enabled ? "dark" : "light");
+
+    // Apply dark theme to WebKit content if available
+    if (WEBKIT_IS_WEB_VIEW(web_view)) {
+        const char *script = dark_mode_enabled ?
+            "document.body.classList.add('dark-theme');" :
+            "document.body.classList.remove('dark-theme');";
+        
+        webkit_web_view_evaluate_javascript(WEBKIT_WEB_VIEW(web_view),
+            script, -1, NULL, NULL, NULL, NULL, NULL);
+    }
+
+    // Force redraw
+    if (GTK_IS_WIDGET(window)) {
+        gtk_widget_queue_draw(window);
+    }
 }
+
 
 void toggle_dark_mode(GtkWidget *widget, gpointer data) {
     dark_mode_enabled = gtk_switch_get_active(GTK_SWITCH(widget));
-    
-    // Apply dark mode to GTK
-    GtkSettings *gtk_settings = gtk_settings_get_default();
-    g_object_set(G_OBJECT(gtk_settings),
-                "gtk-application-prefer-dark-theme",
-                dark_mode_enabled,
-                NULL);
-    
-    // Apply dark mode to editor
-    const char *dark_mode_script = dark_mode_enabled ?
-        "document.body.classList.add('dark-theme');" :
-        "document.body.classList.remove('dark-theme');";
-    
-    webkit_web_view_evaluate_javascript(WEBKIT_WEB_VIEW(web_view),
-        dark_mode_script,
-        -1,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL);
+    apply_dark_mode();
 }
-
 
 void init_config() {
     // Create config directory if it doesn't exist
@@ -1038,7 +1022,6 @@ void load_config() {
     GError *error = NULL;
     
     if (g_key_file_load_from_file(keyfile, config_file_path, G_KEY_FILE_NONE, &error)) {
-        // Load vault directory
         char *saved_vault = g_key_file_get_string(keyfile, "Settings", "vault_directory", NULL);
         if (saved_vault) {
             g_free(vault_directory);
@@ -1047,13 +1030,18 @@ void load_config() {
             update_vault_label();
         }
         
-        // Load dark mode setting
         dark_mode_enabled = g_key_file_get_boolean(keyfile, "Settings", "dark_mode", NULL);
         if (dark_mode_enabled) {
             gtk_switch_set_active(GTK_SWITCH(dark_mode_switch), TRUE);
         }
         
-        // Load last open file
+        preview_hidden = g_key_file_get_boolean(keyfile, "Settings", "preview_hidden", NULL);
+        if (preview_toggle_switch) {
+            gtk_switch_set_active(GTK_SWITCH(preview_toggle_switch), preview_hidden);
+        }
+        
+        apply_dark_mode();
+        
         char *last_file = g_key_file_get_string(keyfile, "Settings", "last_file", NULL);
         if (last_file && g_file_test(last_file, G_FILE_TEST_EXISTS)) {
             g_free(current_file_path);
@@ -1068,30 +1056,30 @@ void load_config() {
                 g_free(script);
                 g_free(escaped_content);
                 g_free(content);
+                is_content_saved = TRUE;
+                update_save_indicator();
+                update_window_title();
+                show_editor();
             }
         }
     }
     
     g_key_file_free(keyfile);
 }
-
 void save_config() {
     GKeyFile *keyfile = g_key_file_new();
     
-    // Save vault directory
     if (vault_directory) {
         g_key_file_set_string(keyfile, "Settings", "vault_directory", vault_directory);
     }
     
-    // Save dark mode setting
     g_key_file_set_boolean(keyfile, "Settings", "dark_mode", dark_mode_enabled);
+    g_key_file_set_boolean(keyfile, "Settings", "preview_hidden", preview_hidden);
     
-    // Save current file
     if (current_file_path) {
         g_key_file_set_string(keyfile, "Settings", "last_file", current_file_path);
     }
     
-    // Save to file
     GError *error = NULL;
     if (!g_key_file_save_to_file(keyfile, config_file_path, &error)) {
         g_warning("Failed to save config: %s", error->message);
@@ -1100,6 +1088,8 @@ void save_config() {
     
     g_key_file_free(keyfile);
 }
+
+
 
 void update_vault_label() {
     if (vault_directory) {
@@ -1110,11 +1100,12 @@ void update_vault_label() {
         gtk_label_set_text(GTK_LABEL(vault_label), "No vault selected");
     }
 }
-void register_web_handlers() {
-    WebKitUserContentManager *manager = webkit_web_view_get_user_content_manager(WEBKIT_WEB_VIEW(web_view));
+
+void register_web_handlers(WebKitUserContentManager *manager) {
     webkit_user_content_manager_register_script_message_handler(manager, "contentChanged");
     webkit_user_content_manager_register_script_message_handler(manager, "newNote");
     webkit_user_content_manager_register_script_message_handler(manager, "openFile");
+    webkit_user_content_manager_register_script_message_handler(manager, "editorInitialized");
     
     g_signal_connect(manager, "script-message-received::contentChanged", 
                      G_CALLBACK(mark_content_unsaved), NULL);
@@ -1122,7 +1113,34 @@ void register_web_handlers() {
                      G_CALLBACK(handle_new_note), NULL);
     g_signal_connect(manager, "script-message-received::openFile", 
                      G_CALLBACK(handle_open_file), NULL);
+    g_signal_connect(manager, "script-message-received::editorInitialized", 
+                     G_CALLBACK(handle_editor_initialized), NULL);
 }
+
+void handle_editor_initialized(WebKitUserContentManager *manager, 
+                             WebKitJavascriptResult *js_result, 
+                             gpointer user_data) {
+    // Apply initial settings
+    if (dark_mode_enabled) {
+        apply_dark_mode();
+    }
+
+    if (preview_hidden) {
+        char *script = g_strdup_printf("window.togglePreview(!Boolean(%s));", 
+                                     preview_hidden ? "true" : "false");
+        webkit_web_view_evaluate_javascript(WEBKIT_WEB_VIEW(web_view),
+            script, -1, NULL, NULL, NULL, NULL, NULL);
+        g_free(script);
+    }
+
+    // Show the appropriate view
+    if (current_file_path) {
+        show_editor();
+    } else {
+        show_start_page();
+    }
+}
+
 
 void update_recent_files() {
     if (!web_view) return;
@@ -1171,7 +1189,6 @@ void show_editor() {
         "showEditor()", -1, NULL, NULL, NULL, NULL, NULL);
 }
 
-
 void handle_new_note(WebKitUserContentManager *manager, 
                     WebKitJavascriptResult *js_result, 
                     gpointer user_data) {
@@ -1202,4 +1219,116 @@ void handle_open_file(WebKitUserContentManager *manager,
     }
     
     g_free(filepath);
+}
+
+// Add function to get the resource file paths
+char* get_resource_path(const char* filename) {
+    char *exe_path = realpath("/proc/self/exe", NULL);
+    if (!exe_path) return NULL;
+    
+    char *exe_dir = g_path_get_dirname(exe_path);
+    free(exe_path);
+    
+    char *resources_dir = g_build_filename(exe_dir, "resources", NULL);
+    char *file_path = g_build_filename(resources_dir, filename, NULL);
+    
+    g_free(resources_dir);
+    g_free(exe_dir);
+    
+    return file_path;
+}
+
+
+char* get_asset_path(const char* filename) {
+    char *exe_path = realpath("/proc/self/exe", NULL);
+    if (!exe_path) {
+        g_warning("Failed to get executable path");
+        return NULL;
+    }
+    
+    char *exe_dir = g_path_get_dirname(exe_path);
+    free(exe_path);
+    
+    char *assets_dir = g_build_filename(exe_dir, "assets", NULL);
+    char *file_path = g_build_filename(assets_dir, filename, NULL);
+    
+    if (!g_file_test(assets_dir, G_FILE_TEST_EXISTS)) {
+        g_warning("Assets directory does not exist: %s", assets_dir);
+        g_free(assets_dir);
+        g_free(exe_dir);
+        g_free(file_path);
+        return NULL;
+    }
+    
+    g_free(assets_dir);
+    g_free(exe_dir);
+    
+    return file_path;
+}
+
+char* get_file_contents(const char* path) {
+    char *contents = NULL;
+    GError *error = NULL;
+    
+    if (!g_file_test(path, G_FILE_TEST_EXISTS)) {
+        g_warning("File does not exist: %s", path);
+        return NULL;
+    }
+    
+    if (g_file_get_contents(path, &contents, NULL, &error)) {
+        return contents;
+    } else {
+        g_warning("Failed to read file %s: %s", path, error->message);
+        g_error_free(error);
+        return NULL;
+    }
+}
+
+void apply_gtk_css() {
+    char *css_path = get_asset_path("style.css");
+    if (!css_path) {
+        g_warning("Could not find style.css");
+        return;
+    }
+
+    GtkCssProvider *provider = gtk_css_provider_new();
+    GError *error = NULL;
+
+    gtk_css_provider_load_from_path(provider, css_path, &error);
+    if (error) {
+        g_warning("Failed to load CSS: %s", error->message);
+        g_error_free(error);
+        g_object_unref(provider);
+        g_free(css_path);
+        return;
+    }
+
+    // Apply to all screens
+    GdkScreen *screen = gdk_screen_get_default();
+    gtk_style_context_add_provider_for_screen(screen,
+                                            GTK_STYLE_PROVIDER(provider),
+                                            GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+
+    g_object_unref(provider);
+    g_free(css_path);
+}
+
+
+void setup_css_provider(void) {
+    if (css_provider != NULL) {
+        return;
+    }
+
+    css_provider = gtk_css_provider_new();
+    char *css_path = get_asset_path("main.css");
+    if (css_path) {
+        gtk_css_provider_load_from_path(css_provider, css_path, NULL);
+        GdkScreen *screen = gdk_screen_get_default();
+        gtk_style_context_add_provider_for_screen(
+            screen,
+            GTK_STYLE_PROVIDER(css_provider),
+            GTK_STYLE_PROVIDER_PRIORITY_APPLICATION
+        );
+        g_free(css_path);
+    }
 }

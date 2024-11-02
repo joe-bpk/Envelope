@@ -1,0 +1,194 @@
+/* Editor Styles */
+html, body { 
+    margin: 0; 
+    padding: 0; 
+    height: 100%; 
+}
+
+#editor { 
+    height: 100%; 
+}
+
+.toastui-editor-defaultUI { 
+    height: 100% !important; 
+}
+
+/* Dark Theme */
+.dark-theme {
+    background-color: #2d2d2d !important;
+    color: white !important;
+}
+
+.dark-theme .toastui-editor-defaultUI {
+    background-color: #2d2d2d !important;
+    border-color: #464646 !important;
+    color: white !important;
+}
+
+.dark-theme .toastui-editor-md-container,
+.dark-theme .toastui-editor-ww-container {
+    background-color: #1e1e1e !important;
+    color: white !important;
+}
+
+.dark-theme .toastui-editor-md-container .toastui-editor,
+.dark-theme .toastui-editor-ww-container .toastui-editor {
+    color: white !important;
+}
+
+.dark-theme .toastui-editor-md-preview,
+.dark-theme .toastui-editor-ww-preview {
+    background-color: #2d2d2d !important;
+    color: white !important;
+}
+
+.dark-theme .toastui-editor-md-preview .toastui-editor-contents,
+.dark-theme .toastui-editor-ww-preview .toastui-editor-contents {
+    color: white !important;
+}
+
+.dark-theme .toastui-editor-contents,
+.dark-theme .toastui-editor-contents * {
+    color: white !important;
+}
+
+.dark-theme .toastui-editor-toolbar {
+    background-color: #363636 !important;
+    border-bottom-color: #464646 !important;
+}
+
+.dark-theme .toastui-editor-defaultUI-toolbar {
+    background-color: #363636 !important;
+    border-bottom-color: #464646 !important;
+}
+
+.dark-theme .toastui-editor-toolbar-icons {
+    border-color: #464646 !important;
+    background-color: #363636 !important;
+    color: white !important;
+}
+
+.dark-theme .toastui-editor-toolbar-icons:hover {
+    background-color: #464646 !important;
+}
+
+.dark-theme .toastui-editor-mode-switch {
+    background-color: #363636 !important;
+    border-color: #464646 !important;
+}
+
+.dark-theme .toastui-editor-mode-switch .tab-item {
+    color: white !important;
+}
+
+.dark-theme .toastui-editor-mode-switch .tab-item.active {
+    background-color: #464646 !important;
+}
+
+.dark-theme .toastui-editor-context-menu {
+    background-color: #363636 !important;
+    border-color: #464646 !important;
+    color: white !important;
+}
+
+.dark-theme .toastui-editor-context-menu * {
+    color: white !important;
+}
+
+.dark-theme .toastui-editor-ww-container .toastui-editor-content {
+    background-color: #1e1e1e !important;
+    color: white !important;
+}
+
+/* Welcome Page - Also ensure text is white in dark mode */
+.start-page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+}
+
+.start-page.dark-theme,
+.start-page.dark-theme h1,
+.start-page.dark-theme h2 {
+    color: white !important;
+}
+
+.start-page h1 {
+    margin-bottom: 1em;
+}
+
+.start-actions {
+    margin: 1em 0;
+}
+
+.start-button {
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    border: none;
+}
+
+.dark-theme .start-button {
+    background: #464646 !important;
+    color: white !important;
+    border: 1px solid #666 !important;
+}
+
+.recent-files {
+    margin-top: 2em;
+    max-width: 600px;
+    width: 100%;
+}
+
+.recent-file {
+    padding: 10px;
+    margin: 5px 0;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.dark-theme .recent-file {
+    color: white !important;
+}
+
+.recent-file:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+.dark-theme .recent-file:hover {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+
+.dark-theme .ProseMirror {
+    font-family: Open Sans, Helvetica Neue, Helvetica, Arial, "\B098\B214\BC14\B978\ACE0\B515", Nanum Barun Gothic, "\B9D1\C740\ACE0\B515", Malgun Gothic, sans-serif;
+    color: white;
+    font-size: 13px;
+    overflow-y: auto;
+    overflow-X: hidden;
+    height: calc(100% - 36px);
+}
+
+
+
+/* Editor Layout */
+.toastui-editor-md-preview .toastui-editor-contents {
+    flex: 1 !important;
+    min-width: 50% !important;
+    transition: all 0.3s ease !important;
+}
+
+/* Hidden Preview State */
+.preview-hidden .toastui-editor-md-preview {
+    display: none !important;
+    width: 0 !important;
+    min-width: 0 !important;
+}
+
+/* Adjust editor size when preview is hidden */
+.preview-hidden .toastui-editor {
+    width: 100% !important;
+    max-width: none !important;
+}
