@@ -337,7 +337,7 @@ void load_editor() {
         "</head>"
         "<body>"
         "<div id=\"start-page\" class=\"start-page\">"
-        "  <h1>Welcome to Markdown Notes</h1>"
+        "  <h1>Welcome to Envelope Notes</h1>"
         "  <div class=\"start-actions\">"
         "    <button onclick=\"window.webkit.messageHandlers.newNote.postMessage('')\" "
         "            class=\"start-button\">New Note</button>"
