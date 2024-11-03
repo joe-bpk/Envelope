@@ -43,22 +43,7 @@ sudo dnf install gcc make gtk3-devel webkit2gtk3-devel libcmark-devel
 sudo pacman -S gcc make gtk3 webkit2gtk cmark
 ```
 
-### Building from Source
-
-```bash
-git clone https://github.com/yourusername/envelope.git
-cd envelope
-make
-sudo make install
-```
-
-## Usage
-
-1. Launch Envelope:
-   ```bash
-   envelope
-   ```
-
+1. Launch app
 2. Choose a vault directory to store your notes
 3. Start creating and organizing your notes!
 
