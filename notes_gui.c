@@ -815,11 +815,17 @@ void toggle_autosave(GtkWidget *widget, gpointer data) {
     autosave_enabled = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
     
     if (autosave_enabled) {
+        // Save immediately if there's unsaved content
+        if (!is_content_saved && current_file_path) {
+            save_current_content_to_file(current_file_path);
+        }
+        
+        // Set up the autosave timer if not already running
         if (autosave_timeout_id == 0) {
-            // Set up autosave every 30 seconds
             autosave_timeout_id = g_timeout_add_seconds(30, autosave_callback, NULL);
         }
     } else {
+        // Remove the autosave timer if it exists
         if (autosave_timeout_id > 0) {
             g_source_remove(autosave_timeout_id);
             autosave_timeout_id = 0;
