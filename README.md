@@ -1,6 +1,6 @@
 # Envelope
 
-A lightweight, modern Markdown note-taking application built with GTK and WebKit.
+A lightweight, modern Markdown note-taking application built with GTK and WebKit with less than 0.1s start time.
 
 > ⚠️ **Note**: This project is currently in active development. Features and interfaces may change significantly.
 
